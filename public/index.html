@@ -1,0 +1,855 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}/* ALPHA 版面：2K 整個畫面放大（單欄 960px 在 2560 只剩一條窄欄） */
+@media (min-width:1600px){#app{zoom:1.7}}
+</style></head><body>
+<title>藍甕日記</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@700;800&family=Zen+Maru+Gothic:wght@500;700&display=swap">
+<!--
+  藍甕日記 — 地獄建（じごくだて）藍甕照顧＋浸染原型
+  方向：直式優先，橫式也可玩。
+  縮放：Canvas 固定邏輯 720×900、置中；畫布外的牆與地板延伸填滿（不留黑邊）。文字與按鈕在 DOM 層。
+  風格：夜裡點燈的木造工坊。木條牆、未漂白棉、藍甕的橄欖金液面與紫銅色「藍の華」。
+  只有這一種外觀（刻意單一主題），所有顏色在 :root 與 THEME。
+-->
+<style>
+/* Layout: one-screen app — HUD band / canvas stage (order card + vat + clothesline) / master's line / ingredient tray */
+:root{
+  --ink:#1d2c4c;        /* 紺 */
+  --ink-2:#2f4a78;      /* 藍 */
+  --cotton:#f2ede1;     /* 生成り */
+  --cotton-2:#d9d0bd;
+  --wood:#8a5c37;
+  --wood-d:#3e2918;
+  --wood-dd:#2a1b10;
+  --bronze:#c49a5a;     /* 藍の華的紫銅光 */
+  --alarm:#d0603f;
+  --ok:#7fae86;
+  --muted:#b7a68b;
+  --f-display:"Shippori Mincho B1","Noto Serif TC","PMingLiU",serif;
+  --f-ui:"Zen Maru Gothic","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+  color-scheme:dark;
+}
+html{box-sizing:border-box;height:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{height:100%;background:var(--wood-dd);color:var(--cotton);font-family:var(--f-ui);overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--bronze);outline-offset:2px}
+#app{height:100%;max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:8px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));padding-block:8px}
+
+/* HUD */
+.hud{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.clock{font-family:var(--f-display);font-weight:800;font-size:clamp(17px,2.4vw,22px);letter-spacing:.04em;font-variant-numeric:tabular-nums}
+.clock small{font-family:var(--f-ui);font-weight:500;font-size:13px;color:var(--muted);margin-left:6px;letter-spacing:0}
+.hud .sp{flex:1}
+.seg{display:flex;background:var(--wood-d);border-radius:999px;padding:3px}
+.seg button,.chip{border:0;background:transparent;min-width:44px;min-height:40px;border-radius:999px;padding:0 12px;font-size:14px}
+.seg button[aria-pressed="true"]{background:var(--cotton);color:var(--ink)}
+.chip{background:var(--wood-d)}
+.chip.lab{background:var(--cotton);color:var(--ink);font-weight:700}
+.coins{font-variant-numeric:tabular-nums;color:#8a6a35;font-weight:700}
+
+/* Stage */
+.stage{position:relative;flex:1;min-height:0;border-radius:14px;overflow:hidden;background:var(--wood-d)}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
+
+.order{position:absolute;left:10px;top:10px;width:min(46%,240px);background:var(--cotton);color:var(--ink);border-radius:10px;padding:10px 12px 12px;box-shadow:0 6px 18px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:6px}
+.order .eyebrow{font-size:11px;letter-spacing:.14em;color:#6f6250}
+.order h2{margin:0;font-family:var(--f-display);font-weight:800;font-size:clamp(20px,3.2vw,26px);line-height:1.1;text-wrap:balance}
+.order h2 ruby rt{font-family:var(--f-ui);font-size:10px;font-weight:500;letter-spacing:.05em}
+.order .meta{font-size:12.5px;color:#4d4436;line-height:1.4}
+.sw{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;color:#6f6250}
+.sw div{display:flex;flex-direction:column;gap:3px}
+.sw i{display:block;height:22px;border-radius:5px;border:1px solid rgba(0,0,0,.12)}
+.sw b{font-weight:700;color:var(--ink);font-size:12px}
+.order button{border:0;background:var(--ink);color:var(--cotton);border-radius:8px;min-height:40px;font-weight:700}
+.order button:disabled{background:var(--cotton-2);color:#8a7f6c;cursor:default}
+
+/* Master line */
+.master{display:flex;gap:10px;align-items:center;min-height:44px;background:var(--wood-d);border-radius:12px;padding:6px 12px;font-size:14.5px;line-height:1.4}
+.master .who{flex:none;width:30px;height:30px;border-radius:50%;background:var(--cotton);color:var(--ink);display:grid;place-items:center;font-family:var(--f-display);font-weight:800;font-size:15px}
+.master p{margin:0;min-width:0}
+.master.flash{animation:flash .6s ease}
+@keyframes flash{0%{background:var(--bronze);color:var(--ink)}100%{background:var(--wood-d)}}
+
+/* Tray */
+.tray{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.tray button{border:0;background:var(--cotton);color:var(--ink);border-radius:12px;min-height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 4px;transition:transform .08s}
+.tray button:active{transform:scale(.95)}
+.tray b{font-family:var(--f-display);font-weight:800;font-size:18px;line-height:1}
+.tray span{font-size:11.5px;color:#5c5242}
+
+/* Overlays */
+.veil{position:fixed;inset:0;background:rgba(20,13,8,.72);display:grid;place-items:center;z-index:20;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-bottom,0px))}
+.sheet{background:var(--cotton);color:var(--ink);border-radius:16px;width:min(560px,100%);max-height:100%;overflow:auto;padding:20px 20px 18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.sheet h1,.sheet h2{font-family:var(--f-display);font-weight:800;margin:0;text-wrap:balance}
+.sheet h1{font-size:clamp(34px,7vw,48px);letter-spacing:.06em;line-height:1.05}
+.sheet h2{font-size:22px}
+.sheet p{margin:0;line-height:1.6;font-size:14.5px;color:#3d3528}
+.sheet .row{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:0;border-radius:10px;min-height:46px;padding:0 16px;font-weight:700;background:var(--ink);color:var(--cotton)}
+.btn.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.kana{font-size:13px;letter-spacing:.2em;color:#6f6250}
+.fine{font-size:12px;color:#6f6250;line-height:1.55}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.meter{background:#fff9ee;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}
+.meter .k{font-size:12px;color:#6f6250}
+.meter .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.meter .r{font-size:11px;color:#8a7f6c}
+.meter.bad .v{color:var(--alarm)}
+.meter.good .v{color:#3f7a4c}
+.charts canvas{position:static;width:100%;height:120px;background:#fff9ee;border-radius:10px;touch-action:auto}
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px;max-height:180px;overflow:auto}
+.log li{display:flex;gap:8px;line-height:1.4}
+.log time{flex:none;font-variant-numeric:tabular-nums;color:#8a7f6c;width:72px}
+.log .warn{color:var(--alarm)}
+.log .good{color:#3f7a4c}
+.reasons{margin:0;padding-left:18px;font-size:14px;line-height:1.6;color:#3d3528}
+.stars{font-size:28px;letter-spacing:.1em;color:var(--bronze)}
+.grade{font-family:var(--f-display);font-weight:800;font-size:44px;line-height:1}
+@media (prefers-reduced-motion:reduce){.master.flash{animation:none}}
+@media (max-width:420px){.tray span{display:none}.tray button{min-height:52px}.clock small{display:none}.hud{gap:6px}.seg button{min-width:38px;padding:0 6px}.chip{min-width:40px;padding:0 10px}}
+</style>
+
+<div id="app">
+  <header class="hud">
+    <div class="clock" id="clock">第 1 天 06:00<small>外 21°</small></div>
+    <span class="sp"></span>
+    <div class="seg" role="group" aria-label="時間速度">
+      <button id="spd0" aria-pressed="false" aria-label="暫停">❚❚</button>
+      <button id="spd1" aria-pressed="true" aria-label="正常速度">▶</button>
+      <button id="spd4" aria-pressed="false" aria-label="四倍速">▶▶</button>
+    </div>
+    <button class="chip" id="mute" aria-label="聲音">♪</button>
+    <button class="chip lab" id="labBtn">化驗</button>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <section class="order" id="order" aria-live="polite">
+      <div class="eyebrow">訂單 <span id="oNo">1</span>・<span class="coins" id="coins">0 文</span></div>
+      <h2 id="oName"><ruby>浅葱<rt>あさぎ</rt></ruby></h2>
+      <div class="meta" id="oMeta">棉布・板締め</div>
+      <div class="sw">
+        <div>目標<i id="swT"></i></div>
+        <div>現在 <b id="nowName">—</b><i id="swN"></i></div>
+      </div>
+      <button id="deliver" disabled>交件</button>
+    </section>
+  </div>
+
+  <div class="master" id="master"><div class="who">師</div><p id="tip">在甕面上畫圈攪拌；把布拖進甕裡浸染。</p></div>
+
+  <nav class="tray" aria-label="材料">
+    <button id="aBran"><b>麩</b><span>餵菌・會變酸</span></button>
+    <button id="aLime"><b>石灰</b><span>拉高 pH・慢慢溶</span></button>
+    <button id="aLye"><b>灰汁</b><span>熱的・溫和加鹼</span></button>
+    <button id="aCoal"><b>炭火</b><span>火床加溫</span></button>
+  </nav>
+</div>
+
+<div class="veil" id="title">
+  <div class="sheet">
+    <div class="kana">じごくだて ・ 地獄建</div>
+    <h1>藍甕日記</h1>
+    <p>蓼藍堆成的「蒅」、木灰泡的灰汁、麩和石灰。甕裡的菌把藍還原成溶得進水的黃綠色，布拉出來碰到空氣才變藍。你照顧的是一群看不見的菌。</p>
+    <div class="row">
+      <button class="btn" id="startRipe">接手一甕熟藍，直接染</button>
+      <button class="btn ghost" id="startBuild">從建甕開始（約一週）</button>
+      <button class="btn ghost" id="resume" hidden>繼續上次</button>
+    </div>
+    <p class="fine">兩個手勢：在甕面上畫圈＝攪拌；把布拖進甕＝浸染（放手就拉起來氧化）。點甕的臉看化驗。數值是依公開的藍染做法寫的模型假設，不是實驗量測。</p>
+  </div>
+</div>
+
+<div class="veil" id="labVeil" hidden>
+  <div class="sheet" role="dialog" aria-labelledby="labH">
+    <div class="row" style="justify-content:space-between;align-items:center"><h2 id="labH">化驗（模型值）</h2><button class="btn ghost" id="labClose">關閉</button></div>
+    <div class="grid2" id="meters"></div>
+    <div class="charts" style="display:flex;flex-direction:column;gap:6px">
+      <div class="fine">最近 4 天：pH（灰帶 10.5–11.5）、甕溫（灰帶 20–30°C）、菌活力與還原度</div>
+      <canvas id="chart" width="1040" height="360" style="height:180px"></canvas>
+    </div>
+    <h2 style="font-size:17px">甕的日誌</h2>
+    <ul class="log" id="log"></ul>
+  </div>
+</div>
+
+<div class="veil" id="resVeil" hidden>
+  <div class="sheet" id="resSheet"></div>
+</div>
+
+<!-- 程式碼 MIT License；美術為程式繪製（CC BY-NC 4.0）。Copyright (c) 2026 Yen-Ting R. Lin (roylin1003). A collaborative project by roylin1003 and Claude. 全部由 AI 協作製作。致謝見 credits.html -->
+<script src="https://beacon.roynexus.com/b.js"></script>
+<script>
+'use strict';
+/* ======================== THEME ======================== */
+const THEME = {
+  wallA:'#7d5434', wallB:'#6c4529', wallGap:'#2c1c10',
+  floorA:'#4a3020', floorB:'#3f281a', floorLine:'#2a1b10',
+  rope:'#cbb48c', pole:'#a37a4b', clayRim:'#7b5640', clayRimHi:'#9c7258', clayIn:'#20160f',
+  liquidBlue:[36,64,110], liquidLive:[104,98,44], liquidRot:[78,68,50],
+  sheen:'rgba(214,170,105,', flower:['#6a4e8a','#3d4f8e','#b58a52','#8a6aa8'],
+  face:'#14100a', blush:'rgba(230,140,120,.45)',
+  cottonRGB:[242,237,225], greenLeuco:[150,170,70],
+  coal:'#ff8a3d', coalDim:'#5a2a12', pit:'#1c120b',
+  stink:'rgba(150,170,90,.7)', steam:'rgba(255,255,255,.35)',
+  text:'#f2ede1', textInk:'#1d2c4c', night:'rgba(10,14,30,', lamp:'rgba(255,200,120,',
+  chart:{bg:'#fff9ee',band:'rgba(29,44,76,.08)',pH:'#2f4a78',T:'#d0603f',N:'#5f8f4f',L:'#b0894f',axis:'#8a7f6c'}
+};
+/* 傳統藍色名（近似色；天然藍實際色依布與光源而異） */
+const SHADES = [
+  {n:'甕覗', k:'かめのぞき', d:0.15, c:[169,209,216]},
+  {n:'水浅葱', k:'みずあさぎ', d:0.28, c:[127,178,187]},
+  {n:'浅葱', k:'あさぎ', d:0.45, c:[79,149,168]},
+  {n:'縹', k:'はなだ', d:0.70, c:[46,111,147]},
+  {n:'藍', k:'あい', d:1.00, c:[31,79,120]},
+  {n:'紺', k:'こん', d:1.45, c:[29,53,87]},
+  {n:'褐', k:'かち', d:2.00, c:[22,29,51]},
+];
+const PATTERNS = {none:'素染', ita:'板締め（摺疊夾板）', wa:'輪絞り（綁小圈）'};
+const ORDERS = [
+  {s:2, m:'棉', p:'ita'},
+  {s:0, m:'絲', p:'none'},
+  {s:3, m:'棉', p:'wa'},
+  {s:5, m:'棉', p:'ita'},
+  {s:4, m:'絲', p:'wa'},
+];
+
+/* ======================== 小工具 ======================== */
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const lerp = (a,b,t) => a+(b-a)*t;
+const mixRGB = (a,b,t) => [lerp(a[0],b[0],t),lerp(a[1],b[1],t),lerp(a[2],b[2],t)];
+const rgb = (c,a=1) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+const gauss = (x,m,w) => Math.exp(-(((x-m)/w)**2));
+const fmtT = t => { const d=Math.floor(t/24)+1, h=Math.floor(t%24); return `第 ${d} 天 ${String(h).padStart(2,'0')}:00`; };
+const shortT = t => { const d=Math.floor(t/24)+1, h=Math.floor(t%24); return `D${d} ${String(h).padStart(2,'0')}:00`; };
+function shadeColor(d){
+  if (d<=0) return THEME.cottonRGB;
+  if (d<SHADES[0].d) return mixRGB(THEME.cottonRGB, SHADES[0].c, d/SHADES[0].d);
+  for (let i=0;i<SHADES.length-1;i++){ const a=SHADES[i],b=SHADES[i+1]; if (d<b.d) return mixRGB(a.c,b.c,(d-a.d)/(b.d-a.d)); }
+  return SHADES[SHADES.length-1].c;
+}
+function shadeIdx(d){ let bi=0,bd=1e9; SHADES.forEach((s,i)=>{const e=Math.abs(Math.log((d+.02)/(s.d+.02))); if(e<bd){bd=e;bi=i;}}); return bi; }
+
+/* ======================== 狀態 ======================== */
+const ROWS = 20;
+let S = null;               // 全部遊戲狀態（可序列化）
+let speed = 1, muted = false, scene = 'title';
+try{ muted = localStorage.getItem('indigo-muted')==='1'; }catch(e){}
+
+function newCloth(){ return {rows:Array(ROWS).fill(0), fresh:Array(ROWS).fill(0), dips:[], oxT:99}; }
+function newState(mode){
+  const base = {mode, t:6, coins:0, orderNo:0, hist:[], log:[], flags:{}, tipCool:{}, lastTip:-99, dead:false, everAlive:false,
+    branPend:0, limePend:0, H:0, F:0, cloth:newCloth()};
+  if (mode==='build') Object.assign(base,{T:31, pH:11.8, N:0.04, food:0.35, L:0.04, O2:0.25, Sp:0, I:1, mix:1});
+  else Object.assign(base,{T:25, pH:10.9, N:0.72, food:0.45, L:0.75, O2:0.04, Sp:0, I:0.85, mix:0.7, everAlive:true});
+  base.flags = {phHigh:true}; // 建甕初期 pH 本來就高，不記警告
+  return base;
+}
+function order(){ const o = ORDERS[S.orderNo % ORDERS.length]; return o; }
+
+/* ======================== 模型（每遊戲小時） ========================
+   變數：T 甕溫、pH、N 菌量(0–1)、food 可用養分、L 還原度(0–1)、O2 溶氧、Sp 腐敗、I 剩餘藍量、mix 均勻度
+   延遲：麩 → 6～12 小時才變成養分；石灰 → 幾小時慢慢溶；炭火熱度約 9 小時半衰
+   交互：pH 與溫度決定菌活力；菌吃養分產酸讓 pH 下降；溶氧把還原藍氧化；低 pH＋過量養分 → 雜菌腐敗 */
+function ambient(t){ const day=t/24; return Math.max(6, 21-0.45*day) + 4*Math.sin(2*Math.PI*((t%24)-9)/24); }
+function activity(){
+  let fT = gauss(S.T,26,9); if (S.T<12) fT*=0.3;
+  const fpH = gauss(S.pH,10.9,0.7);
+  return fT*fpH*(1-S.Sp);
+}
+function step(dt){
+  const Tamb = ambient(S.t);
+  S.T += (0.045*(Tamb-S.T) + 0.4*S.H)*dt;
+  S.H *= Math.exp(-0.075*dt);
+  const mixF = 0.3+0.7*S.mix;
+  // 麩：延遲轉成養分
+  const conv = S.branPend*0.09*mixF*dt; S.branPend-=conv; S.food+=conv;
+  // 石灰：慢慢溶
+  const dis = S.limePend*0.22*mixF*dt; S.limePend-=dis; S.pH += 0.45*dis*Math.max(0,12.6-S.pH);
+  const act = activity();
+  // 菌
+  const ff = S.food/(S.food+0.15);
+  const growth = 0.25*act*S.N*(1-S.N)*ff;
+  let death = 0.006;
+  if (S.pH<9.8) death += 0.08*(9.8-S.pH);
+  if (S.pH>12) death += 0.1*(S.pH-12);
+  if (S.T>38) death += 0.05*(S.T-38);
+  if (S.food<0.02) death += 0.02;
+  S.N = clamp(S.N + (growth - death*S.N)*dt, 0, 1);
+  // 進食 → 產酸
+  const eat = Math.min(S.food, 0.03*S.N*act*ff*dt); S.food -= eat;
+  S.pH -= eat*1.0;
+  if (S.food>0.5) S.pH -= 0.15*(S.food-0.5)*dt;            // 餵太多：乳酸類雜菌快速產酸
+  if (S.pH>10) S.pH -= 0.003*(S.pH-10)*dt;                 // 吸收空氣中 CO2
+  S.pH = clamp(S.pH, 7.5, 12.8);
+  // 溶氧
+  S.O2 = Math.max(0, S.O2 - S.O2*(0.25+0.6*S.N*act)*dt);
+  // 還原
+  const Lt = clamp(S.N*act*1.6,0,1)*(1-S.Sp)*(S.food>0.05?1:0.5);
+  S.L = clamp(S.L + (0.12*(Lt-S.L) - 0.8*S.O2*S.L)*dt, 0, 1);
+  // 腐敗
+  let dS = -0.01;
+  if (S.pH<10.2) dS = 0.03*(10.2-S.pH);
+  if (S.food>0.6 && S.pH<10.7) dS += 0.04*(S.food-0.6)+0.006;
+  if (S.mix<0.15) dS += 0.003;
+  S.Sp = clamp(S.Sp + dS*dt, 0, 1);
+  S.mix = Math.max(0, S.mix - 0.03*dt);
+  // 藍の華
+  const Ft = (S.L>0.55 && S.N>0.5 && S.pH>10.2 && S.pH<11.6) ? clamp((S.L-0.55)*3,0,1) : 0;
+  S.F += (Ft-S.F)*Math.min(1,0.3*dt);
+  if (S.N>0.3) S.everAlive = true;
+  S.t += dt;
+}
+
+/* ======================== 事件與日誌 ======================== */
+function log(text, kind='act'){ S.log.unshift({t:S.t,text,kind}); if (S.log.length>80) S.log.pop(); }
+function edge(key, cond, reset, text, kind){
+  if (!S.flags[key] && cond){ S.flags[key]=true; log(text,kind); return true; }
+  if (S.flags[key] && reset) S.flags[key]=false;
+  return false;
+}
+function checkEvents(){
+  edge('phLow', S.pH<10.3, S.pH>10.5, `pH 跌破 10.3（${S.pH.toFixed(2)}）`, 'warn');
+  edge('phHigh', S.pH>11.8, S.pH<11.6, `pH 超過 11.8，菌被鹼壓著`, 'warn');
+  edge('cold', S.T<16, S.T>17.5, `甕溫低於 16°C（外面 ${ambient(S.t).toFixed(0)}°C）`, 'warn');
+  edge('hot', S.T>34, S.T<32, `甕溫超過 34°C`, 'warn');
+  edge('hungry', S.food<0.06 && S.N>0.2, S.food>0.15, `養分快吃完了`, 'warn');
+  edge('o2', S.O2>0.25, S.O2<0.1, `溶氧偏高，還原藍被氧化`, 'warn');
+  edge('rot', S.Sp>0.3, S.Sp<0.15, `開始有腐臭味（腐敗 ${(S.Sp*100).toFixed(0)}%）`, 'warn');
+  if (edge('ready', S.L>0.55, S.L<0.4, `還原度過 55%，可以下布`, 'good')) {}
+  if (edge('flower', S.F>0.4, S.F<0.12, `藍の華開了`, 'good')) { sfx('chime'); say('flower', '藍の華開了。紫銅色的泡泡，這甕醒了，可以下布。', true); }
+  if (!S.dead && (S.Sp>=0.9 || (S.everAlive && S.N<0.02))){
+    S.dead = true; log(S.Sp>=0.9?'藍甕腐敗，菌群被雜菌取代':'菌群死光了','warn'); setTimeout(showDead, 400);
+  }
+}
+function sampleHist(){
+  const h = Math.floor(S.t);
+  if (!S.hist.length || S.hist[S.hist.length-1].h !== h){
+    S.hist.push({h, pH:+S.pH.toFixed(3), T:+S.T.toFixed(2), N:+S.N.toFixed(3), L:+S.L.toFixed(3)});
+    if (S.hist.length>96) S.hist.shift();
+  }
+}
+
+/* ======================== 師傅 ======================== */
+function say(key, text, force=false){
+  if (!force){
+    if (S.t - S.lastTip < 3) return;
+    if (S.tipCool[key] && S.t - S.tipCool[key] < 12) return;
+  }
+  S.tipCool[key] = S.t; S.lastTip = S.t;
+  $('tip').textContent = text;
+  const m = $('master'); m.classList.remove('flash'); void m.offsetWidth; m.classList.add('flash');
+}
+function tips(){
+  if (S.dead) return;
+  if (S.O2>0.2) return say('o2','別再攪了！液面在變藍，還原的藍正被空氣氧化。');
+  if (S.Sp>0.3) return say('rot','有腐臭味……pH 掉太低，雜菌在搶地盤。先救 pH。');
+  if (S.T>33) return say('hot','太燙了，菌會被煮熟。炭先停。');
+  if (S.pH<10.4 && S.N>0.15) return say('acid','聞起來有點酸。石灰一次一份，隔幾個鐘頭再看。');
+  if (S.food<0.08 && S.N>0.3) return say('food','泡泡變少，菌餓了。煮過的麩給一份就好，別貪多。');
+  if (S.T<17) return say('cold','入秋了，甕在發抖。旁邊的火床添點炭。');
+  if (S.mix<0.2) return say('mix','一整天沒攪了，表面結皮，底下的麩跟石灰都沉著。');
+  if (S.pH>11.7 && S.N>0.2) return say('alk','鹼太重，菌懶洋洋。先別加石灰，讓它自己退。');
+  if (S.mode==='build' && S.t<30) return say('build','剛兌好熱灰汁，甕還在睡。早晚各攪一次，看泡泡。');
+}
+
+/* ======================== 動作 ======================== */
+function floater(txt){ floaters.push({txt, x:VAT.x+(Math.random()*120-60), y:VAT.y-60, life:1.6}); }
+function act(kind){
+  if (scene!=='play' || S.dead) return;
+  sfx('tap');
+  if (kind==='bran'){ S.branPend += 0.3; log('加麩 1 份'); floater('+麩'); }
+  if (kind==='lime'){ S.limePend += 1; log('加石灰 1 份'); floater('+石灰'); }
+  if (kind==='lye'){ S.pH = Math.min(12.4, S.pH + 0.18*Math.max(0,12.2-S.pH)); S.T += 1.5; S.I*=0.985; S.L*=0.96; S.mix=Math.min(1,S.mix+0.2); log('加熱灰汁 1 杓'); floater('+灰汁'); }
+  if (kind==='coal'){ S.H = Math.min(3, S.H+1); log('火床加炭'); floater('+炭'); }
+  hideDemo();
+}
+function stirTurn(){
+  S.O2 = Math.min(1, S.O2+0.035); S.mix = Math.min(1, S.mix+0.4);
+  stirSession++;
+}
+
+/* ======================== 布與浸染 ======================== */
+const CW=130, CH=200;
+const HOME = {x:520, y:96};
+const VAT = {x:360, y:640, rx:212, ry:72};
+const cloth = {x:HOME.x, y:HOME.y, drag:false, gx:0, gy:0, hold:0, wasIn:false, back:0};
+function clothRect(){ return {x:cloth.x-CW/2, y:cloth.y, w:CW, h:CH}; }
+function clothInVat(){ return Math.abs(cloth.x-VAT.x) < VAT.rx*0.72 && cloth.y+CH > VAT.y; }
+function submergedRows(){
+  const out=[]; if (!clothInVat()) return out;
+  for (let i=0;i<ROWS;i++){ const y = cloth.y + (i+0.5)/ROWS*CH; if (y>VAT.y+4) out.push(i); }
+  return out;
+}
+function dipStart(){
+  const c = S.cloth, o = order();
+  const ox = 1-Math.exp(-c.oxT/1.1);
+  const strength = dyeStrength();
+  c.dips.push({ox, L:S.L, pH:S.pH, Sp:S.Sp, hold:0, str:strength, silk:o.m==='絲'});
+  sfx('plop');
+  if (c.dips.length>1 && ox<0.9) say('rush','等它從綠變藍再下去，急不得——沒氧化完的藍回甕會浮在表面。', true);
+  else if (S.L<0.45) say('weak','甕還沒醒，染上去的多是浮色，一洗就掉。', true);
+  else if (o.m==='絲' && S.pH>11.3) say('silk','絲怕鹼！pH 這麼高，絲會變粗澀。', true);
+}
+function dyeStrength(){ return S.L*(1-0.5*S.Sp)*Math.min(1, S.I/0.25); }
+function dipTick(dt){
+  const c = S.cloth, d = c.dips[c.dips.length-1]; if (!d) return;
+  d.hold += dt;
+  const rate = 0.16*d.str*Math.exp(-d.hold/2.2)/2.2;
+  const rows = submergedRows();
+  for (const i of rows){ const g = rate*dt/(1+0.15*c.rows[i]); c.rows[i]+=g; c.fresh[i]+=g; }
+  S.I = Math.max(0, S.I - 0.0004*rows.length*rate*dt*10);
+}
+function clothTick(dt){
+  const c = S.cloth;
+  if (!cloth.inside){ c.oxT += dt; for (let i=0;i<ROWS;i++) c.fresh[i]*=Math.exp(-dt/1.1); }
+  if (!cloth.drag){ // 回到繩上
+    cloth.x += (HOME.x-cloth.x)*Math.min(1,dt*10); cloth.y += (HOME.y-cloth.y)*Math.min(1,dt*10);
+  }
+}
+function meanDepth(){ const r=S.cloth.rows; return r.reduce((a,b)=>a+b,0)/r.length; }
+function spread(){ const r=S.cloth.rows, m=meanDepth(); return Math.sqrt(r.reduce((a,b)=>a+(b-m)**2,0)/r.length); }
+
+/* 牢度（ISO 105 灰卡 1–5 級的「趨勢」模型；實際要洗、要摩擦才測得出來） */
+function assess(){
+  const c=S.cloth, o=order(), reasons=[];
+  let g = 5;
+  const rushed = c.dips.filter((d,i)=>i>0 && d.ox<0.9).length;
+  if (rushed){ g -= 0.3*rushed; reasons.push(`${rushed} 次沒等氧化完就回甕（顏色浮在表面）`); }
+  const weak = c.dips.filter(d=>d.L<0.45).length;
+  if (weak){ g -= 0.25*weak; reasons.push(`${weak} 次在還原不足的甕裡染（浮色，摩擦易掉）`); }
+  const long = c.dips.filter(d=>d.hold>6).length;
+  if (long){ g -= 0.15*long; reasons.push(`${long} 次浸太久（一次吃太多，不如多次薄染）`); }
+  const D = meanDepth();
+  if (c.dips.length && D/c.dips.length>0.2){ g -= 0.5; reasons.push('次數太少就染深（厚塗，易褪）'); }
+  const rot = c.dips.filter(d=>d.Sp>0.4).length;
+  if (rot){ g -= 0.3; reasons.push('在腐敗的甕裡染過'); }
+  g = clamp(Math.round(g*2)/2, 1, 5);
+  const silkHurt = o.m==='絲' && c.dips.some(d=>d.pH>11.3);
+  if (silkHurt) reasons.push('絲在 pH>11.3 的甕裡泡過，手感變粗澀');
+  const idx = shadeIdx(D), diff = idx - o.s;
+  const uneven = o.p==='none' ? spread()>0.12 : spread()>0.2;
+  if (uneven) reasons.push('上下深淺不均：有些段沒浸到');
+  let stars = 3;
+  if (diff!==0) stars -= Math.min(2,Math.abs(diff));
+  if (g<4) stars -= 1;
+  if (silkHurt) stars -= 1;
+  if (uneven) stars -= 1;
+  stars = clamp(stars,0,3);
+  const pay = Math.round(80*(1+o.s*0.35)*stars/3);
+  return {g, reasons, D, idx, diff, stars, pay};
+}
+
+/* ======================== 畫面 ======================== */
+const cv=$('cv'), ctx=cv.getContext('2d');
+const LW=720, LH=900;
+let scale=1, ox=0, oy=0, dpr=1, cssW=1, cssH=1;
+function fit(){
+  const r = $('stage').getBoundingClientRect();
+  cssW = r.width; cssH = r.height; dpr = Math.min(devicePixelRatio||1, 2);
+  // 重要內容只在 x 80–640：窄螢幕裁掉兩側的牆，甕就能放大
+  scale = Math.min(cssW/560, cssH/LH);
+  ox = cssW/2-360*scale; oy = (cssH-LH*scale)/2;
+  cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
+}
+new ResizeObserver(fit).observe($('stage')); fit();
+const toWorld = e => { const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left-ox)/scale, y:(e.clientY-r.top-oy)/scale}; };
+
+// 布的小畫布（24×40 像素，放大後自然暈開，像絞染的邊）
+const PW=24, PH=40, pcv=document.createElement('canvas'); pcv.width=PW; pcv.height=PH; const pctx=pcv.getContext('2d'); const pimg=pctx.createImageData(PW,PH);
+function resist(p,u,v){
+  if (p==='ita'){ const q=(u*5)%1, dd=Math.min(q,1-q); return dd>0.09 ? 0.86 : 0.86*dd/0.09; }
+  if (p==='wa'){ let best=9; for (let a=0;a<3;a++) for (let b=0;b<4;b++){ const cx=(a+0.5)/3, cy=(b+0.5)/4; const dd=Math.hypot((u-cx)*1.0,(v-cy)*1.66); if(dd<best)best=dd; }
+    if (best<0.03) return 0.15; if (best<0.11) return 0.9; if (best<0.14) return 0.9*(0.14-best)/0.03; return 0; }
+  return 0;
+}
+function paintCloth(){
+  const c=S.cloth, p=order().p, ox_=1-Math.exp(-c.oxT/1.1);
+  for (let y=0;y<PH;y++){
+    const row = Math.min(ROWS-1, Math.floor(y/PH*ROWS));
+    const d = c.rows[row], f = clamp(c.fresh[row]*7,0,1);
+    for (let x=0;x<PW;x++){
+      const rs = resist(p,(x+0.5)/PW,(y+0.5)/PH);
+      let col = shadeColor(d*(1-rs));
+      col = mixRGB(col, mixRGB(THEME.greenLeuco, col, 0.35), f*(1-rs));
+      const k=(y*PW+x)*4; pimg.data[k]=col[0]; pimg.data[k+1]=col[1]; pimg.data[k+2]=col[2]; pimg.data[k+3]=255;
+    }
+  }
+  pctx.putImageData(pimg,0,0);
+}
+
+let bubbles=[], floaters=[], stirSession=0, swirl=0, blinkT=0, demoT=0, demoOn=true, idleT=0;
+const stir = {on:false, last:null, acc:0, t0:0, x:0, y:0};
+
+function drawWorld(){
+  const L = -ox/scale, R = (cssW-ox)/scale, T = -oy/scale, B = (cssH-oy)/scale;
+  // 牆：直條木板（照片裡的木格）
+  const wallH = 440;
+  for (let x=Math.floor(L/48)*48; x<R; x+=48){ ctx.fillStyle = (Math.floor(x/48)%2? THEME.wallA:THEME.wallB); ctx.fillRect(x, T, 44, wallH-T); ctx.fillStyle=THEME.wallGap; ctx.fillRect(x+44,T,4,wallH-T); }
+  // 地板
+  for (let y=wallH; y<B; y+=36){ ctx.fillStyle = (Math.floor(y/36)%2?THEME.floorA:THEME.floorB); ctx.fillRect(L,y,R-L,36); ctx.fillStyle=THEME.floorLine; ctx.fillRect(L,y,R-L,2); }
+  // 曬布繩
+  ctx.strokeStyle=THEME.rope; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(Math.max(300,L),88); ctx.quadraticCurveTo(520,104,Math.min(760,R),88); ctx.stroke();
+  // 火床
+  const fx=150, fy=810, H=S.H;
+  ctx.fillStyle=THEME.pit; roundRect(fx-60,fy-30,120,60,10); ctx.fill();
+  for (let i=0;i<7;i++){ const a=i*1.7, px=fx-40+i*13, py=fy-6+Math.sin(a)*8;
+    const glow = clamp(H/1.5,0,1)*(0.7+0.3*Math.sin(perf*4+a));
+    ctx.fillStyle = rgb(mixRGB([90,42,18],[255,138,61],glow)); ctx.beginPath(); ctx.arc(px,py,9,0,7); ctx.fill(); }
+  if (H>0.05){ const g=ctx.createRadialGradient(fx,fy,4,fx,fy,180); g.addColorStop(0,THEME.lamp+(0.35*clamp(H,0,1.5))+')'); g.addColorStop(1,THEME.lamp+'0)'); ctx.fillStyle=g; ctx.fillRect(fx-180,fy-180,360,360); }
+  ctx.fillStyle=THEME.text; ctx.globalAlpha=.55; ctx.font='500 20px '+getComputedStyle(document.body).fontFamily; ctx.textAlign='center'; ctx.fillText('火床',fx,fy+56); ctx.globalAlpha=1;
+}
+function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+function liquidColor(){
+  let c = mixRGB(THEME.liquidBlue, THEME.liquidLive, clamp(S.L*1.2,0,1));
+  c = mixRGB(c, THEME.liquidRot, clamp(S.Sp*1.4,0,1));
+  return c;
+}
+function mood(){
+  if (S.dead) return 'dead';
+  if (S.Sp>0.35) return 'sick';
+  if (S.O2>0.2) return 'dizzy';
+  if (S.pH<10.15) return 'sad';
+  if (S.pH>11.85) return 'squint';
+  if (S.T<15) return 'sleepy';
+  if (S.food<0.07 && S.N>0.2) return 'hungry';
+  if (S.L>0.55 && S.N>0.5) return 'happy';
+  return 'calm';
+}
+function drawVat(){
+  const {x,y,rx,ry} = VAT;
+  let jx = 0; if (S.T<16 && !S.dead) jx = Math.sin(perf*40)*1.6*clamp((16-S.T)/4,0,1);
+  ctx.save(); ctx.translate(jx,0);
+  // 甕口（陶）
+  ctx.fillStyle=THEME.clayRim; ctx.beginPath(); ctx.ellipse(x,y,rx+38,ry+22,0,0,7); ctx.fill();
+  ctx.fillStyle=THEME.clayRimHi; ctx.beginPath(); ctx.ellipse(x,y-4,rx+30,ry+16,0,0,7); ctx.fill();
+  ctx.fillStyle=THEME.clayIn; ctx.beginPath(); ctx.ellipse(x,y,rx+12,ry+6,0,0,7); ctx.fill();
+  // 液面
+  const lc = liquidColor();
+  const g = ctx.createRadialGradient(x-40,y-20,10,x,y,rx);
+  g.addColorStop(0, rgb(mixRGB(lc,[255,255,255],0.12))); g.addColorStop(1, rgb(mixRGB(lc,[0,0,0],0.35)));
+  ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(x,y+4,rx,ry,0,0,7); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.ellipse(x,y+4,rx,ry,0,0,7); ctx.clip();
+  // 紫銅色的膜（還原良好時）
+  if (S.L>0.3){ ctx.strokeStyle = THEME.sheen+(0.35*clamp((S.L-0.3)*2,0,1))+')'; ctx.lineWidth=3;
+    for (let i=0;i<4;i++){ ctx.beginPath(); ctx.ellipse(x+Math.sin(perf*0.4+i)*20, y+4, rx*(0.35+i*0.15), ry*(0.35+i*0.15), 0, 3.6+swirl*0.1, 5.2+swirl*0.1); ctx.stroke(); } }
+  // 攪拌的漩渦
+  if (stir.on || swirlV>0.05){ ctx.strokeStyle='rgba(255,255,255,'+(0.18*clamp(swirlV,0,1))+')'; ctx.lineWidth=4;
+    for (let i=1;i<5;i++){ ctx.beginPath(); ctx.ellipse(x,y+4,rx*i/5,ry*i/5,0,swirl+i,swirl+i+2.2); ctx.stroke(); } }
+  // 泡泡（菌活力）
+  for (const b of bubbles){ ctx.fillStyle='rgba(255,255,255,'+(0.25+0.3*b.life)+')'; ctx.beginPath(); ctx.arc(b.x,b.y,b.r*(1.2-b.life*0.2),0,7); ctx.fill(); }
+  // 藍の華
+  if (S.F>0.05){ const n = Math.floor(26*S.F);
+    for (let i=0;i<n;i++){ const a=i*2.399, rr=Math.sqrt(i)*9, bx=x+70+Math.cos(a)*rr*1.5, by=y-12+Math.sin(a)*rr*0.6;
+      ctx.fillStyle=THEME.flower[i%4]; ctx.globalAlpha=0.85; ctx.beginPath(); ctx.arc(bx,by,6+((i*7)%5),0,7); ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.55)'; ctx.beginPath(); ctx.arc(bx-2,by-2,2,0,7); ctx.fill(); }
+    ctx.globalAlpha=1; }
+  ctx.restore();
+  drawFace(x-20,y+2);
+  // 味道、蒸氣、Zzz
+  if (S.Sp>0.25){ ctx.strokeStyle=THEME.stink; ctx.lineWidth=4; for (let i=0;i<3;i++){ const bx=x-80+i*80; ctx.beginPath(); for (let k=0;k<=20;k++){ const yy=y-90-k*4, xx=bx+Math.sin(k*0.6+perf*3+i)*8; k?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);} ctx.stroke(); } }
+  if (S.T>31){ ctx.strokeStyle=THEME.steam; ctx.lineWidth=6; for (let i=0;i<3;i++){ const bx=x-60+i*60; ctx.beginPath(); for (let k=0;k<=16;k++){ const yy=y-60-k*6-(perf*30%20), xx=bx+Math.sin(k*0.5+perf*2+i)*10; k?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);} ctx.stroke(); } }
+  ctx.restore();
+}
+function drawFace(fx,fy){
+  const m = mood(); ctx.strokeStyle=THEME.face; ctx.fillStyle=THEME.face; ctx.lineWidth=5; ctx.lineCap='round';
+  const ex=46, ey=fy-8, blink = (blinkT%4.2)<0.12;
+  const eye = (cx)=>{
+    if (m==='dead'){ ctx.beginPath(); ctx.moveTo(cx-8,ey-8); ctx.lineTo(cx+8,ey+8); ctx.moveTo(cx+8,ey-8); ctx.lineTo(cx-8,ey+8); ctx.stroke(); return; }
+    if (m==='happy'){ ctx.beginPath(); ctx.arc(cx,ey+4,9,Math.PI*1.1,Math.PI*1.9); ctx.stroke(); return; }
+    if (m==='sleepy'||blink){ ctx.beginPath(); ctx.moveTo(cx-9,ey); ctx.lineTo(cx+9,ey); ctx.stroke(); return; }
+    if (m==='squint'){ const s = cx<fx?1:-1; ctx.beginPath(); ctx.moveTo(cx-8*s,ey-7); ctx.lineTo(cx+6*s,ey); ctx.lineTo(cx-8*s,ey+7); ctx.stroke(); return; }
+    if (m==='dizzy'){ ctx.beginPath(); for (let k=0;k<20;k++){ const a=k*0.6+perf*6, r=k*0.5; const px=cx+Math.cos(a)*r, py=ey+Math.sin(a)*r; k?ctx.lineTo(px,py):ctx.moveTo(px,py);} ctx.stroke(); return; }
+    ctx.beginPath(); ctx.ellipse(cx,ey,6.5,8.5,0,0,7); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.8)'; ctx.beginPath(); ctx.arc(cx-2,ey-3,2.2,0,7); ctx.fill(); ctx.fillStyle=THEME.face;
+  };
+  eye(fx-ex); eye(fx+ex);
+  if (m==='sad'){ ctx.fillStyle='rgba(170,210,255,.9)'; ctx.beginPath(); ctx.ellipse(fx+ex+4,ey+18,4,7,0,0,7); ctx.fill(); ctx.fillStyle=THEME.face; }
+  if (m==='happy' || m==='calm'){ ctx.fillStyle=THEME.blush; ctx.beginPath(); ctx.ellipse(fx-ex-14,fy+10,12,6,0,0,7); ctx.ellipse(fx+ex+14,fy+10,12,6,0,0,7); ctx.fill(); ctx.fillStyle=THEME.face; }
+  ctx.beginPath();
+  const my = fy+18;
+  if (m==='happy'){ ctx.arc(fx,my-6,14,0.15*Math.PI,0.85*Math.PI); ctx.stroke(); }
+  else if (m==='hungry'){ ctx.ellipse(fx,my,8,10+Math.sin(perf*5)*2,0,0,7); ctx.fill(); }
+  else if (m==='sad'||m==='sick'||m==='dead'){ ctx.arc(fx,my+12,12,1.15*Math.PI,1.85*Math.PI); ctx.stroke(); }
+  else if (m==='sleepy'){ ctx.ellipse(fx,my,5,4,0,0,7); ctx.fill(); ctx.font='800 26px '+getComputedStyle(document.body).fontFamily; ctx.fillStyle=THEME.text; ctx.fillText('z',fx+70,fy-40-Math.sin(perf*2)*6); ctx.font='800 18px sans-serif'; ctx.fillText('z',fx+88,fy-62-Math.sin(perf*2+1)*6); }
+  else if (m==='sick'){ /* drawn above */ }
+  else { ctx.moveTo(fx-9,my); ctx.quadraticCurveTo(fx,my+5,fx+9,my); ctx.stroke(); }
+}
+function drawCloth(){
+  paintCloth();
+  const r = clothRect(), inVat = clothInVat();
+  ctx.save();
+  if (inVat){ ctx.beginPath(); ctx.rect(r.x-20, -2000, r.w+40, VAT.y+4+2000); ctx.clip(); }
+  // 影子
+  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(r.x+6,r.y+8,r.w,r.h);
+  ctx.imageSmoothingEnabled = true;
+  const sway = cloth.drag?0:Math.sin(perf*1.3)*2;
+  ctx.drawImage(pcv, r.x+sway*0.3, r.y, r.w, r.h);
+  // 布紋
+  ctx.strokeStyle='rgba(0,0,0,.06)'; ctx.lineWidth=1; for (let i=0;i<r.w;i+=6){ ctx.beginPath(); ctx.moveTo(r.x+i,r.y); ctx.lineTo(r.x+i,r.y+r.h); ctx.stroke(); }
+  ctx.restore();
+  // 竹竿
+  ctx.fillStyle=THEME.pole; roundRect(r.x-14, r.y-8, r.w+28, 12, 6); ctx.fill();
+  if (inVat){ // 水線漣漪
+    ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=3; ctx.beginPath(); ctx.ellipse(cloth.x, VAT.y+6, CW*0.62+Math.sin(perf*6)*4, 10, 0, 0, Math.PI); ctx.stroke();
+  }
+}
+function drawFloaters(dt){
+  ctx.textAlign='center'; ctx.font='800 30px '+getComputedStyle(document.body).fontFamily;
+  floaters = floaters.filter(f=>(f.life-=dt)>0);
+  for (const f of floaters){ f.y -= 40*dt; ctx.globalAlpha=clamp(f.life,0,1); ctx.fillStyle=THEME.text; ctx.fillText(f.txt,f.x,f.y); }
+  ctx.globalAlpha=1;
+}
+// 示範手指（認知大臣：看不懂字也知道要做什麼）
+function drawDemo(){
+  if (!demoOn) return;
+  const ph = (perf%6)/6;
+  let x,y,lab;
+  if (ph<0.5){ const a = ph*2*Math.PI*2; x=VAT.x+Math.cos(a)*120; y=VAT.y+4+Math.sin(a)*40; lab='畫圈＝攪拌'; }
+  else { const k = clamp((ph-0.5)*2.4,0,1), e=k<.5?2*k*k:1-(((-2*k+2)**2)/2); x=lerp(HOME.x,VAT.x+10,e); y=lerp(HOME.y+30,VAT.y+40,e); lab='拖進甕＝浸染'; }
+  ctx.globalAlpha=0.9; ctx.fillStyle='#fff'; ctx.strokeStyle=THEME.textInk; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.arc(x,y,22,0,7); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=THEME.textInk; ctx.beginPath(); ctx.arc(x,y,8,0,7); ctx.fill();
+  ctx.font='700 24px '+getComputedStyle(document.body).fontFamily; const lx = x>400 ? x-30 : x+30; ctx.textAlign = x>400 ? 'right':'left';
+  ctx.lineWidth=6; ctx.strokeStyle='rgba(0,0,0,.6)'; ctx.strokeText(lab,lx,y+8); ctx.fillStyle='#fff'; ctx.fillText(lab,lx,y+8);
+  ctx.globalAlpha=1;
+}
+function hideDemo(){ demoOn=false; idleT=0; }
+
+function drawNight(){
+  const h = S.t%24; const night = h<6||h>=19 ? 1 : h<7 ? 1-(h-6) : h>=18 ? (h-18) : 0;
+  if (night>0){ ctx.fillStyle=THEME.night+(0.38*night)+')'; ctx.fillRect(-ox/scale,-oy/scale,cssW/scale,cssH/scale);
+    const g=ctx.createRadialGradient(VAT.x,VAT.y-200,40,VAT.x,VAT.y-200,520); g.addColorStop(0,THEME.lamp+(0.18*night)+')'); g.addColorStop(1,THEME.lamp+'0)'); ctx.fillStyle=g; ctx.fillRect(-ox/scale,-oy/scale,cssW/scale,cssH/scale); }
+}
+
+/* ======================== 輸入 ======================== */
+cv.addEventListener('pointerdown', e=>{
+  if (scene!=='play') return; unlockAudio();
+  const p = toWorld(e), r = clothRect();
+  hideDemo();
+  if (!S.dead && p.x>r.x-16 && p.x<r.x+r.w+16 && p.y>r.y-14 && p.y<r.y+r.h){
+    cloth.drag=true; cloth.gx=p.x-cloth.x; cloth.gy=p.y-cloth.y; cloth.wasIn=false; cloth.inside=false; cv.setPointerCapture(e.pointerId); return;
+  }
+  const nx=(p.x-VAT.x)/VAT.rx, ny=(p.y-VAT.y)/VAT.ry;
+  if (nx*nx+ny*ny<1.15){ stir.on=true; stir.last=Math.atan2(ny,nx); stir.acc=0; stir.t0=performance.now(); stir.x=p.x; stir.y=p.y; stirSession=0; cv.setPointerCapture(e.pointerId); }
+});
+cv.addEventListener('pointermove', e=>{
+  if (scene!=='play') return; const p = toWorld(e);
+  if (cloth.drag){
+    cloth.x = clamp(p.x-cloth.gx, 80, 660); cloth.y = clamp(p.y-cloth.gy, 40, VAT.y+4);
+    const inNow = clothInVat() && submergedRows().length>0;
+    if (inNow && !cloth.inside) dipStart();
+    if (!inNow && cloth.inside) sfx('lift');
+    cloth.inside = inNow; cloth.wasIn = cloth.wasIn || inNow;
+    if (inNow) S.cloth.oxT = 0;
+    return;
+  }
+  if (stir.on){
+    const nx=(p.x-VAT.x)/VAT.rx, ny=(p.y-VAT.y)/VAT.ry, a=Math.atan2(ny,nx);
+    let d=a-stir.last; if (d>Math.PI) d-=2*Math.PI; if (d<-Math.PI) d+=2*Math.PI;
+    stir.last=a; stir.acc+=Math.abs(d); swirl+=d; swirlV=1;
+    stir.x=p.x; stir.y=p.y;
+    while (stir.acc>=2*Math.PI){ stir.acc-=2*Math.PI; stirTurn(); sfx('swish'); }
+  }
+});
+function endPointer(){
+  if (cloth.drag){ cloth.drag=false; if (cloth.inside) sfx('lift'); cloth.inside=false; }
+  if (stir.on){
+    stir.on=false;
+    const dt=performance.now()-stir.t0;
+    if (stirSession>0) { log(`攪拌 ${stirSession} 圈`); floater(`攪 ×${stirSession}`); }
+    else if (dt<350 && stir.acc<0.4) openLab();
+  }
+}
+cv.addEventListener('pointerup', endPointer);
+cv.addEventListener('pointercancel', endPointer);
+cv.addEventListener('contextmenu', e=>e.preventDefault());
+
+/* ======================== 主迴圈 ======================== */
+let perf=0, last=performance.now(), swirlV=0, uiT=0, hidden=false;
+document.addEventListener('visibilitychange', ()=>{ if (AC){ if (document.hidden) AC.suspend(); else if (!muted) AC.resume(); } hidden=document.hidden; last=performance.now(); if (hidden) save(); });
+function dyeingSession(){ return cloth.drag || (S.cloth.oxT<3 && S.cloth.dips.length>0); }
+function frame(now){
+  const dt = Math.min((now-last)/1000, 0.1); last=now;
+  if (!hidden){
+    perf += dt; blinkT += dt;
+    if (scene==='play' && S && !S.dead){
+      // 時間：平常 1 秒＝半小時；染布時放慢成 1 秒＝1 分鐘
+      const rate = dyeingSession() ? 1/60 : 0.5*speed;
+      let gh = dt*rate; while (gh>0){ const h=Math.min(gh,0.05); step(h); gh-=h; }
+      sampleHist(); checkEvents(); tips();
+      if (cloth.drag && cloth.inside) dipTick(dt);
+      clothTick(dt);
+      // 泡泡生成：菌活力越高越多
+      const rateB = 6*S.N*activity()*(speed?1:0.3);
+      if (Math.random() < rateB*dt){ const a=Math.random()*7, r=Math.sqrt(Math.random()); bubbles.push({x:VAT.x+Math.cos(a)*r*VAT.rx*0.85, y:VAT.y+4+Math.sin(a)*r*VAT.ry*0.8, r:3+Math.random()*6, life:1}); }
+      if (!cloth.drag && !stir.on){ idleT+=dt; if (idleT>9 && S.cloth.dips.length===0) demoOn=true; }
+    }
+    bubbles = bubbles.filter(b=>(b.life-=dt*0.8)>0);
+    swirlV *= Math.exp(-dt*1.5); if (!stir.on) swirl += swirlV*dt*2;
+    if (S) render(dt);
+    uiT += dt; if (uiT>0.25 && S){ uiT=0; updateUI(); }
+  }
+  requestAnimationFrame(frame);
+}
+function render(dt){
+  ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.setTransform(scale*dpr,0,0,scale*dpr,ox*dpr,oy*dpr);
+  drawWorld(); drawVat();
+  drawCloth();
+  if (stir.on){ ctx.strokeStyle=THEME.pole; ctx.lineWidth=12; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(stir.x,stir.y); ctx.lineTo(stir.x+40,stir.y-160); ctx.stroke(); }
+  drawNight(); drawFloaters(dt); drawDemo();
+}
+
+/* ======================== UI ======================== */
+function updateUI(){
+  $('clock').innerHTML = `${fmtT(S.t)}<small>外 ${ambient(S.t).toFixed(0)}°</small>`;
+  $('coins').textContent = `${S.coins} 文`;
+  const o = order(), sh = SHADES[o.s], D = meanDepth();
+  $('oNo').textContent = S.orderNo+1;
+  $('oName').innerHTML = `<ruby>${sh.n}<rt>${sh.k}</rt></ruby>`;
+  $('oMeta').textContent = `${o.m}・${PATTERNS[o.p]}`;
+  $('swT').style.background = rgb(sh.c);
+  $('swN').style.background = rgb(shadeColor(D));
+  $('nowName').textContent = S.cloth.dips.length ? `${SHADES[shadeIdx(D)].n}・${S.cloth.dips.length} 次` : '白布';
+  const c=S.cloth; $('deliver').disabled = !(c.dips.length && !cloth.drag && c.oxT>3);
+  if (!$('labVeil').hidden) renderLab();
+}
+function meterHTML(k,v,r,state){ return `<div class="meter ${state||''}"><span class="k">${k}</span><span class="v">${v}</span><span class="r">${r}</span></div>`; }
+function renderLab(){
+  const st = (ok,bad)=> bad?'bad':ok?'good':'';
+  $('meters').innerHTML = [
+    meterHTML('pH', S.pH.toFixed(2), '理想 10.5–11.5', st(S.pH>=10.5&&S.pH<=11.5, S.pH<10.2||S.pH>11.8)),
+    meterHTML('甕溫', S.T.toFixed(1)+' °C', `理想 20–30・外 ${ambient(S.t).toFixed(0)}°C`, st(S.T>=20&&S.T<=30, S.T<15||S.T>34)),
+    meterHTML('菌活力', Math.round(S.N*activity()*100)+'%', `菌量 ${Math.round(S.N*100)}%`, st(S.N*activity()>0.45, S.N<0.15)),
+    meterHTML('還原度', Math.round(S.L*100)+'%', '過 55% 才染得牢', st(S.L>0.55, S.L<0.3)),
+    meterHTML('可用養分', Math.round(S.food*100)+'%', `待轉化的麩 ${Math.round(S.branPend*100)}%`, st(S.food>0.15&&S.food<0.5, S.food<0.06||S.food>0.6)),
+    meterHTML('溶氧', Math.round(S.O2*100)+'%', '越低越好', st(S.O2<0.1, S.O2>0.2)),
+    meterHTML('腐敗', Math.round(S.Sp*100)+'%', '過 30% 要救', st(S.Sp<0.05, S.Sp>0.3)),
+    meterHTML('剩餘藍量', Math.round(S.I*100)+'%', `未溶石灰 ${S.limePend.toFixed(1)} 份`, st(false, S.I<0.25)),
+  ].join('');
+  $('log').innerHTML = S.log.slice(0,40).map(l=>`<li><time>${shortT(l.t)}</time><span class="${l.kind}">${l.text}</span></li>`).join('') || '<li>還沒有紀錄。</li>';
+  drawChart();
+}
+function drawChart(){
+  const c=$('chart'), g=c.getContext('2d'), W=c.width, H=c.height, C=THEME.chart, h=S.hist;
+  g.fillStyle=C.bg; g.fillRect(0,0,W,H);
+  const pad=36, ph=(H-pad)/3;
+  const rows=[
+    {k:'pH', lo:9, hi:12.5, band:[10.5,11.5], col:C.pH, f:p=>p.pH, label:'pH'},
+    {k:'T', lo:5, hi:40, band:[20,30], col:C.T, f:p=>p.T, label:'°C'},
+    {k:'NL', lo:0, hi:1, col:C.N, f:p=>p.N, f2:p=>p.L, label:'菌／還原'},
+  ];
+  g.font='22px '+getComputedStyle(document.body).fontFamily; g.textBaseline='middle';
+  rows.forEach((r,i)=>{
+    const y0=8+i*ph, y1=y0+ph-10, X=j=>pad+ (W-pad-10)*j/95, Y=v=>y1-(y1-y0)*clamp((v-r.lo)/(r.hi-r.lo),0,1);
+    if (r.band){ g.fillStyle=C.band; g.fillRect(pad,Y(r.band[1]),W-pad-10,Y(r.band[0])-Y(r.band[1])); }
+    g.fillStyle=C.axis; g.textAlign='left'; g.fillText(r.label, pad+6, y0+14);
+    const off = 96-h.length;
+    const line=(f,col,w)=>{ g.strokeStyle=col; g.lineWidth=w; g.beginPath(); h.forEach((p,j)=>{ const xx=X(j+off), yy=Y(f(p)); j?g.lineTo(xx,yy):g.moveTo(xx,yy); }); g.stroke(); };
+    if (h.length>1){ line(r.f,r.col,3); if (r.f2) line(r.f2,C.L,3); }
+    if (h.length){ const p=h[h.length-1]; g.fillStyle=r.col; g.beginPath(); g.arc(X(95),Y(r.f(p)),5,0,7); g.fill(); }
+  });
+  g.textAlign='left'; g.fillStyle=C.N; g.fillText('— 菌', W-190, H-18); g.fillStyle=C.L; g.fillText('— 還原', W-110, H-18);
+}
+function openLab(){ $('labVeil').hidden=false; renderLab(); sfx('tap'); }
+$('labBtn').onclick = openLab;
+$('labClose').onclick = ()=>{ $('labVeil').hidden=true; };
+$('labVeil').addEventListener('click', e=>{ if (e.target.id==='labVeil') $('labVeil').hidden=true; });
+
+function setSpeed(v){ speed=v; ['spd0','spd1','spd4'].forEach(id=>$(id).setAttribute('aria-pressed', String(id==='spd'+v))); }
+$('spd0').onclick=()=>setSpeed(0); $('spd1').onclick=()=>setSpeed(1); $('spd4').onclick=()=>setSpeed(4);
+const muteSync=()=>{ $('mute').textContent = muted?'🔇':'🔈'; $('mute').style.opacity = muted?.6:1; };
+muteSync();
+$('mute').onclick=()=>{ muted=!muted; try{ localStorage.setItem('indigo-muted', muted?'1':'0'); }catch(e){} muteSync(); unlockAudio(); if (!muted) sfx('tap'); };
+$('aBran').onclick=()=>act('bran'); $('aLime').onclick=()=>act('lime'); $('aLye').onclick=()=>act('lye'); $('aCoal').onclick=()=>act('coal');
+
+$('deliver').onclick=()=>{
+  const r = assess(), o=order(), sh=SHADES[o.s];
+  const verdict = r.diff===0 ? `就是${sh.n}。` : r.diff<0 ? `淺了 ${-r.diff} 階（染出${SHADES[r.idx].n}）。` : `深了 ${r.diff} 階（染出${SHADES[r.idx].n}）。`;
+  S.coins += r.pay; log(`交件：${SHADES[r.idx].n}，牢度 ${r.g} 級，${'★'.repeat(r.stars)||'退件'}`, r.stars>=2?'good':'warn');
+  $('resSheet').innerHTML = `
+    <div class="kana">訂單 ${S.orderNo+1}・${o.m}・${PATTERNS[o.p]}</div>
+    <h2>${verdict}</h2>
+    <div class="row" style="align-items:center;gap:18px">
+      <canvas id="resCloth" width="120" height="180" style="position:static;width:90px;height:135px;border-radius:6px"></canvas>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div class="fine">染色牢度（模型推估）</div>
+        <div class="grade">${r.g} 級</div>
+        <div class="stars">${'★'.repeat(r.stars)}${'☆'.repeat(3-r.stars)}</div>
+        <div class="fine">工錢 ${r.pay} 文・浸染 ${S.cloth.dips.length} 次</div>
+      </div>
+    </div>
+    ${r.reasons.length?`<ul class="reasons">${r.reasons.map(x=>`<li>${x}</li>`).join('')}</ul>`:'<p>每次都等它氧化變藍才回甕，甕也在狀態上。這塊布洗得住。</p>'}
+    <p class="fine">牢度 1–5 級是 ISO 105 灰卡的分級，數字越高越不褪色。這裡依你的浸染過程推估趨勢，不是實測。</p>
+    <div class="row"><button class="btn" id="nextOrder">下一張訂單</button></div>`;
+  $('resVeil').hidden=false;
+  const rc=$('resCloth').getContext('2d'); rc.imageSmoothingEnabled=true; paintCloth(); rc.drawImage(pcv,0,0,120,180);
+  sfx(r.stars>=2?'chime':'tap');
+  $('nextOrder').onclick=()=>{ $('resVeil').hidden=true; S.orderNo++; S.cloth=newCloth(); save(); };
+};
+
+function showDead(){
+  const warns = S.log.filter(l=>l.kind==='warn').slice(0,6);
+  $('resSheet').innerHTML = `
+    <div class="kana">${fmtT(S.t)}</div>
+    <h2>這甕藍沒救了</h2>
+    <p>${S.Sp>=0.9?'雜菌占了上風，甕變成腐臭的褐色。':'甕裡的還原菌死光了。'}從日誌倒回去看，事情是這樣開始的：</p>
+    <ul class="log">${warns.reverse().map(l=>`<li><time>${shortT(l.t)}</time><span class="warn">${l.text}</span></li>`).join('')||'<li>沒有警告紀錄。</li>'}</ul>
+    <div class="row"><button class="btn" id="rebuild">重新建甕</button><button class="btn ghost" id="ripe2">接手熟甕</button></div>`;
+  $('resVeil').hidden=false;
+  $('rebuild').onclick=()=>{ $('resVeil').hidden=true; start('build'); };
+  $('ripe2').onclick=()=>{ $('resVeil').hidden=true; start('ripe'); };
+}
+
+/* ======================== 存檔 ======================== */
+const KEY='aigame.v1';
+function save(){ try{ if (S && !S.dead) localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+function load(){ try{ const s=localStorage.getItem(KEY); return s?JSON.parse(s):null; }catch(e){ return null; } }
+setInterval(()=>{ if (scene==='play') save(); }, 8000);
+
+function start(mode, saved){
+  S = saved || newState(mode); scene='play'; $('title').hidden=true;
+  cloth.x=HOME.x; cloth.y=HOME.y; demoOn = !saved;
+  if (!saved){
+    log(mode==='build'?'兌好熱灰汁、下蒅，開始建甕':'接手一甕熟藍', 'act');
+    $('tip').textContent = mode==='build' ? '剛兌好熱灰汁，甕還在睡。早晚各攪一次，看泡泡。' : '這甕剛好在狀態上。布拖進甕裡數兩三秒，拉起來等它變藍。';
+  }
+  setSpeed(1); save();
+}
+$('startRipe').onclick=()=>{ unlockAudio(); start('ripe'); };
+$('startBuild').onclick=()=>{ unlockAudio(); start('build'); };
+{ const s = load(); if (s && !s.dead){ $('resume').hidden=false; $('resume').textContent=`繼續上次（${fmtT(s.t)}）`; $('resume').onclick=()=>{ unlockAudio(); start(s.mode,s); }; } }
+// 標題畫面背景先放一甕熟藍
+S = newState('ripe');
+
+// 熱更新：保留遊戲進度
+window.claude?.hot?.snapshot?.(()=>({S, scene}));
+const boot = data => { if (data && data.S && data.scene==='play') start(data.S.mode, data.S); requestAnimationFrame(frame); };
+window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
+
+/* ======================== 聲音（WebAudio，小而短） ======================== */
+let AC=null;
+const SND={unlock:()=>unlockAudio(),play:k=>sfx(k)};   // 對外統一入口；內部仍是下面的合成音（水滴、風鈴，不用素材庫音檔）
+function unlockAudio(){ if (AC){ if (AC.state==='suspended') AC.resume(); return; } try{ AC = new (window.AudioContext||window.webkitAudioContext)(); AC.resume(); }catch(e){ AC=null; } }
+function tone(f0,f1,dur,type='sine',vol=0.12){
+  if (!AC||muted) return; const t=AC.currentTime, o=AC.createOscillator(), g=AC.createGain();
+  o.type=type; o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(Math.max(30,f1),t+dur);
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); o.connect(g).connect(AC.destination); o.start(t); o.stop(t+dur+0.02);
+}
+function sfx(k){
+  if (k==='tap') tone(660,520,0.08,'triangle',0.08);
+  if (k==='plop') { tone(320,90,0.18,'sine',0.2); }
+  if (k==='lift') tone(180,420,0.2,'sine',0.12);
+  if (k==='swish') tone(240,140,0.12,'triangle',0.05);
+  if (k==='chime'){ tone(880,880,0.4,'sine',0.08); setTimeout(()=>tone(1320,1320,0.5,'sine',0.06),120); }
+}
+</script>
+
+</body></html>

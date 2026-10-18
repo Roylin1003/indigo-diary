@@ -1,0 +1,10 @@
+## 快取規則：每次載入向伺服器確認有沒有更新（改完即線上版，無 staging）。
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/credits.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/
+  Cache-Control: public, max-age=0, must-revalidate
